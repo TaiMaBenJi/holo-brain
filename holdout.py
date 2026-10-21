@@ -1,7 +1,10 @@
 # -*- coding: utf-8 -*-
-"""诚实留出集：手工写的 40 条自然说法（不来自任何模板族），代表真实用户话术。"""
+"""诚实留出集：手工写的自然说法（不来自任何模板族），代表真实用户话术。
 
-HOLDOUT = [
+前 40 条为 v1.0 留出集；后 25 条为独立盲测集（第二批，与种子迭代完全分离）。
+"""
+
+HOLDOUT_V1 = [
     ("帮我看下 notes.txt 里写了啥", "read_file"),
     ("把今天的会议记录存到 会议.md", "write_file"),
     ("我手机是啥型号来着", "search_memory"),
@@ -43,3 +46,34 @@ HOLDOUT = [
     ("目录下有哪些 py 文件", "list_dir"),
     ("搜一下 'TODO' 这个词", "search_code"),
 ]
+
+# 第二批盲测：与第一批和种子迭代完全独立的新说法
+HOLDOUT_V2 = [
+    ("念一下 readme.md", "read_file"),
+    ("这事帮我记下来，下午四点取快递", "add_memory"),
+    ("我宠物叫啥来着", "search_memory"),
+    ("curl 一下 example.com", "run_cmd"),
+    ("用python验算45*17", "run_python"),
+    ("打开 https://example.com 看看", "fetch_url"),
+    ("在这些文件里头找找 fixme", "search_code"),
+    ("创建 a.md", "write_file"),
+    ("看看文件夹里有啥", "list_dir"),
+    ("把 a.md 打开我瞅瞅", "read_file"),
+    ("别忘了明天交房租", "add_memory"),
+    ("上次说的那个会几点开", "search_memory"),
+    ("好嘞", "confirm"),
+    ("甭弄了", "deny"),
+    ("跑下 pip list 看看装了啥", "run_cmd"),
+    ("python 里跑下 8**3", "run_python"),
+    ("记到便签：明早买咖啡", "add_note"),
+    ("访问一下 news.qq.com", "fetch_url"),
+    ("数一下一共多少文件", "task"),
+    ("把 notes.md 打开", "read_file"),
+    ("代码里 findme 出现在哪", "search_code"),
+    ("你还记得我说过喜欢什么颜色吗", "search_memory"),
+    ("写点东西到 log.txt", "write_file"),
+    ("帮我把临时文件都清掉", "task"),
+    ("列一下都有哪些 md", "list_dir"),
+]
+
+HOLDOUT = HOLDOUT_V1 + HOLDOUT_V2

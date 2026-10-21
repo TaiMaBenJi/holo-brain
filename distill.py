@@ -10,23 +10,20 @@ import json
 import os
 import re
 import random
-import sys
 import time
-
-import numpy as np
 
 from holo import HoloBrain, D, INTENTS
 import make_data as MD
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-FILLS = ["notes.txt", "todo.md", "数据", "配置", "行数", "词频", "成都", "我的手机型号",
-         "服务器地址", "会议时间", "example.com", "pwd", "main.py", "test.txt", "你好世界",
-         "日记.md", "一段话", "读后感", "2**32", "python脚本", "data.csv", "日志.log",
-         "打印目录树", "清理临时文件"]
 
 
 def expand_seeds():
-    """意图种子：单槽模板全枚举（精确匹配必须存在，不靠随机抽奖）。"""
+    """意图种子：具名槽位类型感知填充（URL 槽绝不填文件名，杜绝跨意图污染）。
+
+    单槽模板：全枚举（精确匹配必须存在，不靠随机抽奖）；
+    多槽模板：确定性采样（组合空间太大时）。
+    """
     import importlib.util
     spec = importlib.util.spec_from_file_location(
         "ing", os.path.join(HERE, "ingest_data.py"))
@@ -36,15 +33,25 @@ def expand_seeds():
     out = []                                    # (intent, text)
     for intent, tpls in ing.SEEDS.items():
         for tpl in tpls:
-            k = tpl.count("{}")
-            if k == 0:
+            names = re.findall(r"\{(\w+)\}", tpl)
+            if not names:
                 out.append((intent, tpl))
-            elif k == 1:
-                out.extend((intent, tpl.format(f)) for f in FILLS)
-            else:
-                for _ in range(12):
+                continue
+            pools = [ing.SLOTS.get(nm) for nm in names]
+            if any(p is None for p in pools):
+                continue                        # 未知槽位：宁缺毋滥
+            space = 1
+            for p in pools:
+                space *= len(p)
+            if space <= 40:                     # 小空间：全枚举
+                from itertools import product
+                for vals in product(*pools):
                     out.append((intent, tpl.format(
-                        *[random.choice(FILLS) for _ in range(k)])))
+                        **{names[i]: vals[i] for i in range(len(names))})))
+            else:                               # 大空间：确定性采样
+                for _ in range(16):
+                    out.append((intent, tpl.format(
+                        **{nm: random.choice(ing.SLOTS[nm]) for nm in names})))
     # CLINC150 真实英文指令（已按映射表折进 14 意图）
     import glob
     cands = glob.glob(os.path.join(HERE, "data", "raw", "oos-eval*",
@@ -59,7 +66,7 @@ def expand_seeds():
     return out
 
 
-def main():
+def main(save_path=None):
     t0 = time.time()
     brain = HoloBrain()
     random.seed(2026)
@@ -83,7 +90,7 @@ def main():
             "u": ["https://example.com", "github.com/openai", "hf-mirror.com"]}
     n2 = 0
     for intent, tpls in MD_TPL.items():
-        if intent not in __import__("holo").INTENTS:
+        if intent not in INTENTS:
             continue
         for tpl in tpls:
             names = re.findall(r"\{(\w+)\}", tpl)
@@ -91,8 +98,10 @@ def main():
                 brain.learn("intent:" + intent, tpl)
                 n2 += 1
                 continue
+            if any(nm not in SLOT for nm in names):
+                continue                        # 未知槽位：跳过
             for _ in range(14):
-                vals = {nm: random.choice(SLOT.get(nm, FILLS)) for nm in names}
+                vals = {nm: random.choice(SLOT[nm]) for nm in names}
                 try:
                     brain.learn("intent:" + intent, tpl.format(**vals))
                     n2 += 1
@@ -127,10 +136,11 @@ def main():
     print("杏仁核(自我评估): %d 条经验" % n_ev, flush=True)
 
     # ---------------- 保存（模型 = 码本 + 记忆账本）
-    brain.save()
-    size = os.path.getsize(os.path.join(HERE, "holo_brain.npz"))
-    print("保存 holo_brain.npz: %.2f MB（其中码本 %.2f MB）"
-          % (size / 1048576, len(brain.base) * D / 1048576), flush=True)
+    out = save_path or os.path.join(HERE, "holo_brain.npz")
+    brain.save(out)
+    size = os.path.getsize(out)
+    print("保存 %s: %.2f MB（其中码本 %.2f MB）"
+          % (out, size / 1048576, len(brain.base) * D / 1048576), flush=True)
     print("提取+捆绑用时: %.1f 秒（零梯度、零epoch）" % (time.time() - t0), flush=True)
 
 

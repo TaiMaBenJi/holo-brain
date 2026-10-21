@@ -3,7 +3,7 @@
 # 用法: bash scripts/fetch_data.sh
 set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-RAW="$HERE/data_raw"
+RAW="$HERE/data/raw"
 mkdir -p "$RAW"
 
 echo "[1/3] firefly-train-1.1M（中文多任务指令，采样 160MB）"

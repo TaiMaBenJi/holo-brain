@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-"""自进化 Agent：自研 10MB 小模型（脑干） + 外部记忆（皮层）。
+"""自进化 Agent：自研全息小模型（脑干） + 外部记忆（皮层）。
 
-  理解/决策   ← brain.npz（意图路由 · 记忆相关性 · 自我评估 三个头）
+  理解/决策   ← holo_brain.npz（意图路由 · 记忆相关性 · 自我评估 三个头）
   事实记忆   ← SQLite facts 表（FTS5 粗排 + 小模型精排）
   技能库     ← SQLite skills 表（写代码成功后沉淀，越用越强 = 自我进化）
   经历本     ← SQLite episodes 表（做过的任务、成败、教训）
@@ -25,15 +25,10 @@ import subprocess
 import sys
 import time
 
-import numpy as np
-
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SANDBOX = os.path.join(HERE, "sandbox")
 DB = os.path.join(HERE, "memory.db")
-INTENTS = ["write_file", "read_file", "list_dir", "search_code", "run_cmd",
-           "run_python", "add_memory", "search_memory", "add_note",
-           "fetch_url", "chat", "task", "confirm", "deny"]
 
 
 # ============================================================ 外部记忆
@@ -350,7 +345,6 @@ class Agent:
             self.holo.load()
         except Exception:
             pass
-        self.brain = self.und.brain()          # 旧 transformer(备用票，可无)
         self.mem = Memory()
         os.makedirs(SANDBOX, exist_ok=True)
         self.trace = []
@@ -387,18 +381,7 @@ class Agent:
         self.holo.save()
         return len(replays)
 
-    # ---------- 三个头
-    def intent(self, text):
-        ids = np.array([self.brain.encode(text)], dtype=np.int64)
-        lg = self.brain.predict(ids, "intent")[0]
-        e = np.exp(lg - lg.max())
-        sm = e / e.sum()
-        return INTENTS[int(lg.argmax())], float(sm.max())
-
-    def mem_score(self, a, b):
-        ids = np.array([self.brain.encode_pair(a, b)], dtype=np.int64)
-        return float(self.brain.predict(ids, "mem")[0])
-
+    # ---------- 自我思考（杏仁核）
     def self_eval(self, action_result):
         """自我思考（杏仁核）：评估这次行动，失败就换方案。"""
         s = self.self_eval_holo((action_result or "")[:180])
@@ -434,8 +417,8 @@ class Agent:
             finally:
                 sys.stdout = old
             out = (buf.getvalue() or str(res))
-            ok = self.reflect("技能 " + sk["name"], str(out)[:200], 1)
-            self.mem.skill_feedback(sk["id"], ok)
+            self.reflect("技能 " + sk["name"], str(out)[:200], 1)
+            self.mem.skill_feedback(sk["id"], True)   # 技术成功（无异常）即记成功
             return "「%s」(置信 %.2f)\n%s" % (sk["name"], score, str(out)[:1500])
         except Exception as e:
             self.mem.skill_feedback(sk["id"], False)
@@ -582,7 +565,6 @@ class Agent:
 
     # ---------- 自我进化
     def evolve(self, n=5):
-        rng = np.random.default_rng(int(time.time()))
         pool = ["统计沙箱里所有文本文件的行数", "统计所有 md 文件的词频",
                 "把所有 txt 合并成一个文件", "找出最大的 5 个文件",
                 "打印沙箱目录树", "在文件里搜索关键词'数据'", "清理临时文件"]
@@ -607,35 +589,6 @@ class Agent:
         rate = sum(1 for _, ok, _ in results if ok) / max(1, len(results))
         print("本轮成功率: %.0f%%" % (rate * 100))
         return rate
-
-    # ---------- 权重级进化：用经历微调评估头
-    def learn_from_episodes(self, steps=120):
-        rows = self.db_rows()
-        if len(rows) < 8:
-            print("经历太少（%d 条），先多干点活" % len(rows))
-            return
-        rng = np.random.default_rng(1)
-        for st in range(steps):
-            r = rows[rng.integers(len(rows))]
-            text = (r["task"] + " " + r["result"])[:180]
-            ids = pad1(self.brain.encode(text), self.brain.maxlen)
-            y = np.array([1 if r["ok"] else 0])
-            task = "eval" if rng.random() < 0.7 else "intent"
-            yy = y if task == "eval" else np.array([INTENTS.index("task")])
-            loss, grads = self.brain.step_loss(ids, task, yy)
-            self.brain.adam_step(grads, lr=2e-4)
-        self.brain.save(os.path.join(HERE, "brain.npz"))
-        print("已用 %d 条经历微调 %d 步，模型已更新（权重级自我进化）" % (len(rows), steps))
-
-    def db_rows(self):
-        return self.mem.db.execute(
-            "SELECT task,result,ok FROM episodes WHERE ok IS NOT NULL LIMIT 500").fetchall()
-
-
-def pad1(seq, L):
-    x = np.zeros((1, L), dtype=np.int64)
-    x[0, :len(seq)] = seq[:L]
-    return x
 
 
 # ============================================================ CLI

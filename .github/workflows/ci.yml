@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: pip install numpy requests
+
+      - name: Syntax check
+        run: >
+          python -m py_compile
+          agent.py holo.py understand.py distill.py ingest_data.py
+          make_data.py test_holo.py holdout.py
+
+      - name: Acceptance tests (bundled model)
+        run: python test_holo.py
+
+      - name: Agent smoke test
+        run: |
+          python agent.py "记住我的手机是一加13"
+          python agent.py "我手机是什么型号"
+          python agent.py --task "统计沙箱里所有文件的行数"

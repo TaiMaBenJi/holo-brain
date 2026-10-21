@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# 一键：从零构建知识库 + 全息脑 + 冒烟测试
+# 一键：从零构建知识库 + 全息脑 + 跑验收测试
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$HERE"
-[ -d data_raw ] || bash scripts/fetch_data.sh
+[ -d data/raw ] || bash scripts/fetch_data.sh
 [ -f knowledge.db ] || python3 ingest_data.py
 [ -f holo_brain.npz ] || python3 distill.py
 python3 test_holo.py

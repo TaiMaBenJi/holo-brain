@@ -305,6 +305,13 @@ class HoloBrain:
                     votes[lab] = votes.get(lab, 0.0) + self.sim(v, p) * 0.10
         if not votes:
             return "chat", 0.0, {}
+        # 前额叶先验：写入类意图需要写入动词。
+        # 事实原文（"记住我手机是一加13"）与问句（"我手机是什么"）共享大量字面，
+        # 但问句没有"记住/记下"类动词 → 写入票打折，避免事实抢走召回。
+        _ADD_VERBS = ("记住", "记下", "帮我记", "记一下", "记好", "别忘了",
+                      "存到记忆", "存进记忆", "以后记住", "帮我记住", "存到本机记忆")
+        if "add_memory" in votes and not any(k in text for k in _ADD_VERBS):
+            votes["add_memory"] *= 0.55
         rank = sorted(votes.items(), key=lambda kv: -kv[1])
         intent = rank[0][0]
         conf = 1.0 if len(rank) == 1 else \

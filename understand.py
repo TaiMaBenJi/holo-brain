@@ -4,30 +4,21 @@
 不训练。几十万条真实指令/问答就是模型本身：
   route(text)  意图路由 —— 在 CLINC150 + 中文种子示例里做 kNN 投票
   answer(text) 知识问答 —— 在 firefly/alpaca 的 问→答 对里检索最佳答案
-  score(a,b)   相关性打分（字符二元组重叠 + 可选小模型加权）
+  score(a,b)   相关性打分（字符二元组重叠系数）
 
 fast path: SQLite FTS5(自切词) 粗排 → 精确重叠率精排。
 """
-import json
 import os
 import re
 import sqlite3
 
-import numpy as np
-
 HERE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(HERE, "knowledge.db")
-VOCAB = os.path.join(HERE, "vocab.json")
-NPZ = os.path.join(HERE, "brain.npz")
-META = os.path.join(HERE, "brain_meta.json")
-INTENTS = ["write_file", "read_file", "list_dir", "search_code", "run_cmd",
-           "run_python", "add_memory", "search_memory", "add_note",
-           "fetch_url", "chat", "task", "confirm", "deny"]
 
 
 def bigrams(text):
     words = re.findall(r"[a-zA-Z0-9_]+", text.lower())
-    cjk = re.findall(r"[\u4e00-\u9fff]", text)
+    cjk = re.findall(r"[一-鿿]", text)
     toks = words + cjk + ["".join(cjk[i:i + 2]) for i in range(len(cjk) - 1)]
     return list(dict.fromkeys(toks))[:64]
 
@@ -44,29 +35,13 @@ class Understand:
     def __init__(self):
         self.db = sqlite3.connect(DB, check_same_thread=False) \
             if os.path.exists(DB) else None
-        self.seeds = []                       # 中文种子常驻内存（~1400 行，绕过FTS召回）
+        self.seeds = []                       # 中文种子常驻内存（绕过 FTS 召回损失）
         if self.db:
             try:
                 self.seeds = self.db.execute(
                     "SELECT text,intent FROM examples WHERE src='seed'").fetchall()
             except Exception:
                 self.seeds = []
-        self._brain = None
-
-    # ---------------- 可选：训练好的小模型作第四票（有就用，没有不影响）
-    def brain(self):
-        if self._brain is None and os.path.exists(NPZ) and os.path.exists(META) \
-                and os.path.exists(VOCAB):
-            try:
-                from brain import TinyBrain
-                cfg = json.load(open(META, encoding="utf-8"))["cfg"]
-                b = TinyBrain(**cfg)
-                b.load(NPZ)
-                b.load_vocab(VOCAB)
-                self._brain = b
-            except Exception:
-                self._brain = False
-        return self._brain or None
 
     # ---------------- 意图路由（kNN 投票：每意图只取最强样本，防数量碾压）
     def route(self, text, topn=40):
@@ -92,7 +67,7 @@ class Understand:
             vote(intent, s * 1.25, t2)
 
         # ---- 第二层：FTS 长尾（CLINC 英文等）
-        has_cjk = bool(re.search(r"[\u4e00-\u9fff]", text))
+        has_cjk = bool(re.search(r"[一-鿿]", text))
         toks = bigrams(text)
         fts_q = " OR ".join('"%s"' % t for t in toks if t) or '""'
         try:
@@ -103,25 +78,9 @@ class Understand:
         except Exception:
             rows = []
         for intent, etext, src in rows:
-            if src == "seed" or (has_cjk and not re.search(r"[\u4e00-\u9fff]", etext)):
+            if src == "seed" or (has_cjk and not re.search(r"[一-鿿]", etext)):
                 continue                         # 种子已内存精扫；中文不吃英文样本
             vote(intent, overlap(text, etext), etext)
-
-        # ---- 第三层：小模型 tie-break
-        b = self.brain()
-        if b:
-            try:
-                ids = np.array([b.encode(text)], dtype=np.int64)
-                lg = b.predict(ids, "intent")[0]
-                e = np.exp(lg - lg.max()); sm = e / e.sum()
-                top = int(lg.argmax())
-                if sm[top] > 0.5:
-                    vi = INTENTS[top]
-                    cur = best_by_intent.get(vi, (0, ""))[0]
-                    vote(vi, cur + float(sm[top]) * 0.6,
-                         best_by_intent.get(vi, ("", ""))[1])
-            except Exception:
-                pass
 
         if not best_by_intent:
             return "chat", 0.0, {}
@@ -174,12 +133,4 @@ class Understand:
 
     # ---------------- 相关性（个人记忆/技能复用）
     def score(self, a, b):
-        s = overlap(a, b)
-        br = self.brain()
-        if br:
-            try:
-                ids = np.array([br.encode_pair(a, b)], dtype=np.int64)
-                s = 0.6 * s + 0.4 * float(br.predict(ids, "mem")[0])
-            except Exception:
-                pass
-        return s
+        return overlap(a, b)

@@ -20,7 +20,7 @@ def check(name, cond, extra=""):
 
 
 def main():
-    from distill import expand_seeds, FILLS  # noqa: E402
+    from distill import expand_seeds  # noqa: F401
     import random
     random.seed(2026)
 
@@ -64,14 +64,18 @@ def main():
 
     print("\n== B. 全量提取（从开源数据捆绑） ==", flush=True)
     t0 = time.time()
-    raw_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data_raw")
-    if os.path.isdir(raw_dir):
-        import distill
-        distill.main()                       # 有原始数据 → 重新捆绑（写仓库内模型）
-    else:
-        print("  （无 data_raw/，直接使用仓库内已捆绑好的 holo_brain.npz）", flush=True)
+    raw_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "raw")
     b2 = HoloBrain()
-    b2.load()
+    if os.path.isdir(raw_dir):
+        # 有原始数据 → 重新捆绑到临时文件（验证可复现；不覆盖仓库内已捆绑模型）
+        import tempfile
+        import distill
+        tmp = os.path.join(tempfile.gettempdir(), "holo_brain_test.npz")
+        distill.main(save_path=tmp)
+        b2.load(tmp)
+    else:
+        print("  （无 data/raw/，直接使用仓库内已捆绑好的 holo_brain.npz）", flush=True)
+        b2.load()
     print("加载用时 %.1fs\n" % (time.time() - t0), flush=True)
 
     print("== C. 三大认知能力 ==", flush=True)
@@ -125,7 +129,7 @@ def main():
         else:
             bad.append((text, want, it))
     acc = correct / len(HOLDOUT)
-    check("真实话术留出集 ≥75%", acc >= 0.75,
+    check("真实话术留出集（含独立盲测集）≥90%", acc >= 0.90,
           "%.1f%% (%d/%d)" % (acc * 100, correct, len(HOLDOUT)))
     for x in bad[:8]:
         print("      miss:", x)

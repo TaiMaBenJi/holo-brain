@@ -1,6 +1,10 @@
 # 运行时与大数据（不入库）
-knowledge.db          # 23 万条知识库（514MB），用 scripts/fetch_data.sh 重建
-memory.db             # 个人记忆 + 技能库
+# 注意：.gitignore 的 # 注释只能单独成行，不能接在模式后面
+
+# 23 万条知识库（约 500MB），用 scripts/fetch_data.sh + ingest_data.py 重建
+knowledge.db
+# 个人记忆 + 技能库
+memory.db
 data/
 data_raw/
 sandbox/
@@ -8,3 +12,4 @@ __pycache__/
 *.pyc
 *.log
 *.tmp
+*.npz.bak
