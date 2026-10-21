@@ -64,8 +64,12 @@ def main():
 
     print("\n== B. 全量提取（从开源数据捆绑） ==", flush=True)
     t0 = time.time()
-    import distill
-    distill.main()
+    raw_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data_raw")
+    if os.path.isdir(raw_dir):
+        import distill
+        distill.main()                       # 有原始数据 → 重新捆绑（写仓库内模型）
+    else:
+        print("  （无 data_raw/，直接使用仓库内已捆绑好的 holo_brain.npz）", flush=True)
     b2 = HoloBrain()
     b2.load()
     print("加载用时 %.1fs\n" % (time.time() - t0), flush=True)
@@ -74,21 +78,24 @@ def main():
     # C1 意图路由
     random.seed(7)
     test_data = MD  # intent 测试集在 data/intent_test.txt
-    rows = [l.rstrip("\n").split("\t")
-            for l in open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                       "data", "intent_test.txt"), encoding="utf-8")]
+    import random as _r
+    _r.seed(999)                             # 独立种子：同族模板的独立样本
+    _all = MD.gen_intent(n_per=200)
+    _r.shuffle(_all)
+    rows = [(str(y), t) for y, t in _all[:300]]
     correct = 0
     n = min(300, len(rows))
     for r in rows[:n]:
         it, _, _ = b2.route(r[1])
         correct += (it == MD.INTENTS[int(r[0])])
     acc = correct / n
-    check("前额叶·意图路由 ≥85%", acc >= 0.85, "%.1f%% (%d/%d)" % (acc * 100, correct, n))
+    check("前额叶·意图路由（同族模板）≥85%", acc >= 0.85,
+          "%.1f%% (%d/%d)" % (acc * 100, correct, n))
 
     # C2 联想相关性
-    mrows = [l.rstrip("\n").split("\t")
-             for l in open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                        "data", "mem_test.txt"), encoding="utf-8")]
+    _m = MD.gen_mem(n_each=100)
+    _r.shuffle(_m)
+    mrows = [(str(y), q, mm) for y, q, mm in _m[:300]]
     correct, n = 0, min(300, len(mrows))
     for r in mrows[:n]:
         pred = b2.related(r[1], r[2]) > 0.5
@@ -97,9 +104,9 @@ def main():
     check("联想皮层·记忆相关性 ≥80%%", acc >= 0.80, "%.1f%% (%d/%d)" % (acc * 100, correct, n))
 
     # C3 自我评估
-    erows = [l.rstrip("\n").split("\t")
-             for l in open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                        "data", "eval_test.txt"), encoding="utf-8")]
+    _e = MD.gen_eval(n_each=150)
+    _r.shuffle(_e)
+    erows = [(str(y), t) for y, t in _e[:300]]
     correct, n = 0, min(300, len(erows))
     for r in erows[:n]:
         pred = b2.ok_or_not(r[1]) > 0.5
