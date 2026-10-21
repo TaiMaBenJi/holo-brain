@@ -1,0 +1,13 @@
+# 第三方数据来源与许可
+本项目**不分发**任何第三方数据集，只提供下载与重写脚本。数据版权归原作者所有。
+
+| 数据集 | 来源 | 用途 | 许可 |
+|---|---|---|---|
+| Firefly (1.1M 中文指令) | https://huggingface.co/datasets/YeungNLP/firefly-train-1.1M | 知识库（问→答） | 见数据集页面 |
+| Alpaca-GPT4 中文 | https://huggingface.co/datasets/silk-road/alpaca-data-gpt4-chinese | 知识库（GPT4 质量答案） | 见数据集页面 |
+| CLINC150 | https://github.com/clinc/oos-eval | 意图样本（151 类真实用户指令） | 见仓库 LICENSE |
+
+技术思想参考（**思想引用，未复制任何代码或权重**）：
+- 超维计算 / 全息归约表示：Kanerva 1988；Plate 1995（HDC / HHR 的原始论文）
+- DeepSeek-R1 / DeepSeek-V3 模型卡公开的 MoE 稀疏激活、MLA 低秩潜空间、MTP 多 token 预测、
+  冷启动+反思、蒸馏等机制 —— 本项目按其**思想**在自己的架构上重新实现
